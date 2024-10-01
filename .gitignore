@@ -1,0 +1,72 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# PyCharm
+.idea/
+
+# VS Code
+.vscode/
+
+# Environment
+.env
+.venv
+env/
+venv/
+ENV/
+
+# Data
+data/raw/
+*.csv
+*.zip
+*.md5
+
+# Logs
+*.log
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Neo4j
+graph.db/
+
+# PyTorch
+*.pth
+
+# Temporary files
+*.tmp
+
+# Large files
+*.hdf5
+*.h5
+
+# Specific to your project
+MachineLearningCVE.zip
+GeneratedLabelledFlows.zip
