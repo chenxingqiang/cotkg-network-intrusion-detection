@@ -17,8 +17,8 @@ The CICIDS2017 dataset is used in this project. Follow these steps to download a
 - 1. Clone this repository:
 
 ```bash
-git clone <https://github.com/chen/CoTKG-Network-intrusion-detection.git>
-cd CoTKG-Network-Intrusion-Detection
+git clone https://github.com/chenxingqiang/cotkg-network-intrusion-detection.git
+cd cotkg-network-intrusion-detection
 ```
 
 - 2. Install the required dependencies:
@@ -81,11 +81,10 @@ Chen Xingqiang
 Hanghzou Turing AI Co.,Ltd.
 Email: <chen.xingqiang@iechor.com>
 
-
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## Acknowledgments
 
-- CICIDS2017 dataset: https://www.unb.ca/cic/datasets/ids-2017.html
+- CICIDS2017 dataset: <https://www.unb.ca/cic/datasets/ids-2017.html>
