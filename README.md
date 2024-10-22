@@ -14,20 +14,20 @@ This project implements a network intrusion detection system using Chain of Thou
 
 The CICIDS2017 dataset is used in this project. Follow these steps to download and prepare the data:
 
-- 1. Clone this repository:
+ 1. Clone this repository:
 
 ```bash
 git clone https://github.com/chenxingqiang/cotkg-network-intrusion-detection.git
 cd cotkg-network-intrusion-detection
 ```
 
-- 2. Install the required dependencies:
+ 2. Install the required dependencies:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-- 3. Run the data download script:
+ 3. Run the data download script:
 
 ```bash
 python src/download_data.py
