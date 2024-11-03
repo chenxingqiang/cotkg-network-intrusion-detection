@@ -15,6 +15,7 @@ class TestKnowledgeGraph(unittest.TestCase):
         self.assertEqual(node['name'], 'test_node')
 
     def test_create_relationship(self):
+
         node1 = self.kg_constructor.create_entity('TestEntity', 'node1')
         node2 = self.kg_constructor.create_entity('TestEntity', 'node2')
         rel = self.kg_constructor.create_relationship(
