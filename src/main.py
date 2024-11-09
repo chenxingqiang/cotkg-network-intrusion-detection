@@ -5,7 +5,6 @@ from sklearn.model_selection import train_test_split
 from src.data_processing.preprocess import load_and_preprocess_data
 from src.data_processing.feature_engineering import engineer_features
 from src.data_processing.data_balancing import balance_dataset
-from src.data_processing.feature_selection import select_features
 from src.knowledge_graph.kg_constructor import KnowledgeGraphConstructor
 from src.models.graph_sage_model import GraphSAGE, train_graph_sage, evaluate_graph_sage
 from src.explainability.integrated_gradients import ExplainabilityAnalyzer
