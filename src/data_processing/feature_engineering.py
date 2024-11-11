@@ -14,6 +14,9 @@ def engineer_features(df):
         pd.DataFrame: 增强后的数据框
     """
     try:
+        # 重置索引避免重复索引问题
+        df = df.reset_index(drop=True)
+
         # 创建副本避免修改原始数据
         df = df.copy()
 
@@ -75,9 +78,8 @@ def engineer_features(df):
                     df[f'{col}_Rolling_Std_{window}'] = df[col].rolling(
                         window=window, min_periods=1).std()
                     # 使用fillna处理开始的空值
-                    df[f'{col}_Rolling_Mean_{window}'].fillna(
-                        df[col], inplace=True)
-                    df[f'{col}_Rolling_Std_{window}'].fillna(0, inplace=True)
+                    df.loc[:, f'{col}_Rolling_Mean_{window}'] = df[f'{col}_Rolling_Mean_{window}'].fillna(0)
+                    df.loc[:, f'{col}_Rolling_Std_{window}'] = df[f'{col}_Rolling_Std_{window}'].fillna(0)
 
         # 6. 复合特征
         if all(col in df.columns for col in ['Tot size', 'Number', 'Duration']):
@@ -104,7 +106,7 @@ def engineer_features(df):
 
     except Exception as e:
         print(f"Error in feature engineering: {str(e)}")
-        raise
+        return df  # 返回原始数据框如果特征工程失败
 
 
 def get_feature_importance(df, target='label'):

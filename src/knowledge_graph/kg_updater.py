@@ -1,11 +1,38 @@
-from py2neo import Graph, NodeMatcher, RelationshipMatcher
+from py2neo import Graph, Node, Relationship
+import networkx as nx
+import pandas as pd
+import numpy as np
+import hashlib
 
 
 class KnowledgeGraphUpdater:
-    def __init__(self, graph):
-        self.graph = graph
-        self.node_matcher = NodeMatcher(graph)
-        self.rel_matcher = RelationshipMatcher(graph)
+    def __init__(self, uri="bolt://localhost:7687", username="neo4j", password="neo4jneo4j"):
+        """
+        Initialize the KnowledgeGraphUpdater.
+        """
+        self.graph = Graph(uri, auth=(username, password))
+        self.nx_graph = nx.DiGraph()
+
+    def _convert_properties(self, properties):
+        """Convert numpy types to Python native types"""
+        if properties is None:
+            return {}
+
+        converted = {}
+        for k, v in properties.items():
+            if isinstance(v, (np.int_, np.intc, np.intp, np.int8,
+                            np.int16, np.int32, np.int64,
+                            np.uint8, np.uint16, np.uint32, np.uint64)):
+                converted[k] = int(v)
+            elif isinstance(v, (np.float_, np.float16, np.float32, np.float64)):
+                converted[k] = float(v)
+            elif isinstance(v, np.bool_):
+                converted[k] = bool(v)
+            elif isinstance(v, np.ndarray):
+                converted[k] = v.tolist()
+            else:
+                converted[k] = v
+        return converted
 
     def update_knowledge(self, entities, relationships):
         for entity in entities:
