@@ -5,8 +5,12 @@ Summary: A network intrusion detection system using Chain of Thought, knowledge 
 Home-page: https://github.com/chenxingqiang/cotkg-network-intrusion-detection
 Author: Chen Xingqiang
 Author-email: chen.xingqiang@iechor.com
+Project-URL: Bug Tracker, https://github.com/chenxingqiang/cotkg-network-intrusion-detection/issues
+Project-URL: Documentation, https://github.com/chenxingqiang/cotkg-network-intrusion-detection/wiki
+Project-URL: Source Code, https://github.com/chenxingqiang/cotkg-network-intrusion-detection
 Classifier: Development Status :: 3 - Alpha
 Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: Science/Research
 Classifier: License :: OSI Approved :: MIT License
 Classifier: Operating System :: OS Independent
 Classifier: Programming Language :: Python :: 3
@@ -49,6 +53,7 @@ Dynamic: classifier
 Dynamic: description
 Dynamic: description-content-type
 Dynamic: home-page
+Dynamic: project-url
 Dynamic: requires-dist
 Dynamic: requires-python
 Dynamic: summary

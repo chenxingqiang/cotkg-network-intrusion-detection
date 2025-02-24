@@ -12,10 +12,16 @@ setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/chenxingqiang/cotkg-network-intrusion-detection",
+    project_urls={
+        "Bug Tracker": "https://github.com/chenxingqiang/cotkg-network-intrusion-detection/issues",
+        "Documentation": "https://github.com/chenxingqiang/cotkg-network-intrusion-detection/wiki",
+        "Source Code": "https://github.com/chenxingqiang/cotkg-network-intrusion-detection",
+    },
     packages=find_packages(),
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Intended Audience :: Developers",
+        "Intended Audience :: Science/Research",
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
         "Programming Language :: Python :: 3",
@@ -60,6 +66,12 @@ setup(
             'data/raw/*',
             'data/processed/*',
             'scripts/*',
+        ],
+    },
+    entry_points={
+        'console_scripts': [
+            'cotkg-ids=cotkg_ids.main:main',
+            'cotkg-ids-setup=cotkg_ids.scripts.setup_ollama:main',
         ],
     },
 )
