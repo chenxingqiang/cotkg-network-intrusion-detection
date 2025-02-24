@@ -29,6 +29,11 @@ shap
 # NLP和CoT
 transformers
 openai
+anthropic
+dashscope
+zhipuai
+httpcore[socks]
+ollama
 
 # 进度条
 tqdm

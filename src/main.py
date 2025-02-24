@@ -9,16 +9,27 @@ from data_processing.data_balancing import balance_dataset
 from knowledge_graph.kg_constructor import KnowledgeGraphConstructor
 from knowledge_graph.kg_analysis import KnowledgeGraphAnalyzer
 from models.graph_sage_model import GraphSAGE, train_graph_sage
+from config.config import DEFAULT_CONFIG
 
-def run_full_pipeline():
-    """Run the complete data processing and training pipeline"""
+def run_full_pipeline(config=None):
+    """
+    Run the complete data processing and training pipeline
+    
+    Args:
+        config (dict, optional): Configuration dictionary. Defaults to DEFAULT_CONFIG.
+    """
     try:
+        # Use default config if none provided
+        config = config or DEFAULT_CONFIG
+        
         # Initialize result dictionary
         results = {
             'model': None,
             'kg': None,
             'stats': None,
-            'feature_importance': None
+            'feature_importance': None,
+            'graph_data': None,
+            'cot_analysis': []  # Add COT analysis results
         }
         
         # Create necessary directories
@@ -28,8 +39,10 @@ def run_full_pipeline():
         # 1. Load and preprocess data
         print("\n1. Loading and preprocessing data...")
         data_result = load_and_preprocess_data(
-            'data/raw/CICIDS2017.csv',
-            test_mode=True
+            config['data']['raw_data_path'],
+            test_mode=True,
+            test_size=config['data']['test_size'],
+            random_state=config['data']['random_state']
         )
         
         if data_result is None:
@@ -47,24 +60,28 @@ def run_full_pipeline():
         importance = get_feature_importance(
             pd.concat([X_train_engineered, pd.Series(y_train, name='label')], axis=1)
         )
-        print("\nTop 10 most important features:")
-        print(importance.head(10))
+        results['feature_importance'] = importance
         
         # 4. Data balancing
         print("\n4. Balancing data...")
         X_balanced, y_balanced = balance_dataset(
             X_train_engineered, 
             y_train,
-            method='hybrid'
+            method=config['data']['balancing']['method']
         )
         
-        # 5. Knowledge graph construction
-        print("\n5. Constructing knowledge graph...")
-        kg = KnowledgeGraphConstructor()
+        # 5. Knowledge graph construction with COT
+        print("\n5. Constructing knowledge graph with Chain of Thought analysis...")
+        kg = KnowledgeGraphConstructor(
+            uri=config['neo4j']['uri'],
+            username=config['neo4j']['username'],
+            password=config['neo4j']['password'],
+            max_retries=config['neo4j']['max_retries']
+        )
         kg.clear_graph()
         
-        # Add balanced data to graph
-        print("\nAdding flows to knowledge graph...")
+        # Add balanced data to graph with COT analysis
+        print("\nAdding flows to knowledge graph with COT analysis...")
         for idx, (_, row) in enumerate(X_balanced.iterrows()):
             flow_data = {
                 **row.to_dict(),
@@ -75,54 +92,45 @@ def run_full_pipeline():
             if idx % 50 == 0:
                 print(f"Added {idx} flows...")
         
+        results['kg'] = kg
+        
         # 6. Analyze knowledge graph
         print("\n6. Analyzing knowledge graph...")
         analyzer = KnowledgeGraphAnalyzer()
-        
-        # Get basic statistics
         stats = analyzer.get_graph_statistics()
-        print("\nKnowledge Graph Statistics:")
-        print("Nodes:", stats['nodes'])
-        print("Relationships:", stats['relationships'])
-        
-        # Get attack distribution
-        attack_dist = analyzer.get_attack_distribution()
-        print("\nAttack Distribution:")
-        print(attack_dist)
-        
-        # Get feature statistics
-        feature_stats = analyzer.get_feature_statistics()
-        print("\nFeature Statistics:")
-        print(feature_stats)
-        
-        # Generate visualization
-        print("\nGenerating graph visualization...")
-        analyzer.visualize_graph_sample(limit=50)
+        results['stats'] = stats
         
         # 7. Train GraphSAGE model
         print("\n7. Training GraphSAGE model...")
         graph_data = kg.prepare_data_for_graph_sage(X_balanced, y_balanced)
+        results['graph_data'] = graph_data
         
         if graph_data is not None:
             model = GraphSAGE(
                 in_channels=X_balanced.shape[1],
-                hidden_channels=64,
+                hidden_channels=config['model']['graphsage']['hidden_channels'],
                 out_channels=len(y_balanced.unique()),
-                num_layers=2,
-                dropout=0.5
+                num_layers=config['model']['graphsage']['num_layers'],
+                dropout=config['model']['graphsage']['dropout']
             )
             
-            optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
-            train_graph_sage(model, graph_data, optimizer)
+            optimizer = torch.optim.AdamW(
+                model.parameters(),
+                lr=config['model']['graphsage']['learning_rate'],
+                weight_decay=config['model']['graphsage']['weight_decay']
+            )
             
-            # Update results dictionary
+            train_graph_sage(
+                model, 
+                graph_data, 
+                optimizer,
+                epochs=config['model']['training']['epochs']
+            )
+            
             results['model'] = model
-        else:
-            print("Warning: Could not prepare graph data for training")
         
         # 8. Save results
         print("\n8. Saving results...")
-        os.makedirs('results', exist_ok=True)
         
         # Save feature importance
         importance.to_csv('results/feature_importance.csv')
@@ -133,19 +141,11 @@ def run_full_pipeline():
             f.write(f"Nodes: {stats['nodes']}\n")
             f.write(f"Relationships: {stats['relationships']}\n")
             
-            f.write("\nAttack Distribution:\n")
-            f.write(str(attack_dist))
-            
             f.write("\nFeature Statistics:\n")
-            f.write(str(feature_stats))
+            f.write(str(analyzer.get_feature_statistics()))
         
         print("\nPipeline completed successfully!")
         print("Results have been saved to the 'results' directory")
-        
-        # Update remaining results
-        results['kg'] = kg
-        results['stats'] = stats
-        results['feature_importance'] = importance
         
         return results
         

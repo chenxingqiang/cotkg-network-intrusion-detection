@@ -7,6 +7,9 @@ import hashlib
 import time
 import torch
 from torch_geometric.data import Data
+from sklearn.metrics.pairwise import cosine_similarity
+from sklearn.model_selection import StratifiedShuffleSplit
+from .cot_generator import generate_cot, parse_cot_response
 
 
 class KnowledgeGraphConstructor:
@@ -110,10 +113,38 @@ class KnowledgeGraphConstructor:
             return None
 
     def add_flow(self, flow_data):
-        """Add a flow to the knowledge graph"""
+        """Add a flow to the knowledge graph with COT analysis"""
         try:
             # Generate consistent node ID
             flow_id = f"Flow_{len(self.nx_graph.nodes())}"
+            
+            # Format flow data for COT analysis
+            flow_str = "\n".join([f"{k}: {v}" for k, v in flow_data.items()])
+            
+            # Generate COT analysis
+            try:
+                cot_response = generate_cot(flow_str)
+                entities, relationships = parse_cot_response(cot_response)
+                
+                # Add COT-derived entities
+                for entity in entities:
+                    entity_id = f"{entity['type']}_{hashlib.md5(entity['name'].encode()).hexdigest()[:8]}"
+                    self.add_node(entity['type'], entity_id, {'name': entity['name']})
+                    
+                    # Connect flow to entity
+                    if entity['type'] == 'Attack':
+                        self.add_edge(flow_id, 'CLASSIFIED_AS', entity_id)
+                    else:
+                        self.add_edge(flow_id, 'HAS_FEATURE', entity_id)
+                
+                # Add COT-derived relationships
+                for rel in relationships:
+                    source_id = f"Feature_{hashlib.md5(rel['source'].encode()).hexdigest()[:8]}"
+                    target_id = f"Attack_{hashlib.md5(rel['target'].encode()).hexdigest()[:8]}"
+                    self.add_edge(source_id, rel['type'], target_id)
+                    
+            except Exception as e:
+                print(f"Error in COT analysis: {str(e)}")
             
             # Add node to NetworkX graph
             self.nx_graph.add_node(flow_id, **flow_data)
@@ -164,7 +195,7 @@ class KnowledgeGraphConstructor:
 
     def prepare_data_for_graph_sage(self, X, y):
         """
-        Prepare data for GraphSAGE model.
+        Prepare data for GraphSAGE model with optimized graph construction.
         """
         try:
             # Convert features to tensor
@@ -175,21 +206,39 @@ class KnowledgeGraphConstructor:
             
             # Get edge indices from NetworkX graph
             edge_index = []
-            for source, target in self.nx_graph.edges():
-                # Only add edges if both nodes are in our mapping
-                if source in node_mapping and target in node_mapping:
-                    source_idx = node_mapping[source]
-                    target_idx = node_mapping[target]
-                    # Only add edge if indices are within bounds
-                    if source_idx < len(X) and target_idx < len(X):
-                        edge_index.append([source_idx, target_idx])
             
-            # Add self-loops for all nodes
+            # Add edges based on feature similarity
+            similarity_matrix = cosine_similarity(X)
+            
+            # Add edges for similar nodes
             for i in range(len(X)):
-                edge_index.append([i, i])
+                # Get top k similar nodes
+                k = min(20, len(X) - 1)  # Adjust k based on dataset size
+                similar_indices = similarity_matrix[i].argsort()[-k:]
+                
+                for j in similar_indices:
+                    if i != j:  # Avoid self-loops for now
+                        edge_index.append([i, j])
+            
+            # Add edges based on label similarity
+            for i in range(len(X)):
+                # Connect to nodes with same label
+                same_label_indices = y.loc[y == y[i]].index
+                for j in same_label_indices[:10]:  # Limit to 10 same-label connections
+                    if i != j:
+                        edge_index.append([i, j])
+            
+            # Add self-loops with special attention
+            for i in range(len(X)):
+                # Add multiple self-loops to emphasize self-information
+                for _ in range(3):  # Add 3 self-loops per node
+                    edge_index.append([i, i])
             
             # Convert to tensor and transpose
             edge_index = torch.LongTensor(edge_index).t()
+            
+            # Remove duplicate edges
+            edge_index = torch.unique(edge_index, dim=1)
             
             # Verify edge indices are within bounds
             max_idx = edge_index.max().item()
@@ -199,34 +248,45 @@ class KnowledgeGraphConstructor:
             # Convert labels to tensor
             y = torch.LongTensor(y.values)
             
-            # Create train/test masks
+            # Create stratified train/test split masks
+            sss = StratifiedShuffleSplit(n_splits=1, test_size=0.2, random_state=42)
+            
             num_nodes = x.size(0)
             train_mask = torch.zeros(num_nodes, dtype=torch.bool)
             test_mask = torch.zeros(num_nodes, dtype=torch.bool)
             
-            # 80% train, 20% test
-            train_size = int(0.8 * num_nodes)
-            indices = torch.randperm(num_nodes)
-            train_mask[indices[:train_size]] = True
-            test_mask[indices[train_size:]] = True
+            for train_idx, test_idx in sss.split(X, y):
+                train_mask[train_idx] = True
+                test_mask[test_idx] = True
             
-            # Create PyG Data object
+            # Create validation mask from training set
+            val_size = int(0.1 * num_nodes)  # 10% validation set
+            val_mask = torch.zeros(num_nodes, dtype=torch.bool)
+            train_indices = train_mask.nonzero().view(-1)
+            val_indices = train_indices[:val_size]
+            train_mask[val_indices] = False
+            val_mask[val_indices] = True
+            
+            # Create PyG Data object with validation mask
             data = Data(
                 x=x,
                 edge_index=edge_index,
                 y=y,
                 train_mask=train_mask,
+                val_mask=val_mask,
                 test_mask=test_mask
             )
             
-            # Verify data is valid
-            print("\nGraph data statistics:")
+            # Print statistics
+            print("\nOptimized Graph data statistics:")
             print(f"Number of nodes: {data.num_nodes}")
             print(f"Number of edges: {data.num_edges}")
             print(f"Number of node features: {data.num_node_features}")
             print(f"Number of classes: {len(torch.unique(data.y))}")
             print(f"Training nodes: {train_mask.sum().item()}")
+            print(f"Validation nodes: {val_mask.sum().item()}")
             print(f"Testing nodes: {test_mask.sum().item()}")
+            print(f"Average degree: {data.num_edges / data.num_nodes:.2f}")
             
             return data
             

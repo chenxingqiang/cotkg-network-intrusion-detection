@@ -1,39 +1,58 @@
-import pandas as pd
-from src.data_processing.preprocess import load_and_preprocess_data
-from src.models.graph_sage_prep import prepare_graph_sage_data
-from src.models.graph_sage import GraphSAGE
+"""Training script for CoTKG-IDS"""
 
-def train_model(config):
-    """Main training function"""
+import os
+import torch
+import logging
+from datetime import datetime
+from config.config import DEFAULT_CONFIG
+from src.main import run_full_pipeline
+
+def setup_logging():
+    """Setup logging configuration"""
+    log_dir = 'logs'
+    os.makedirs(log_dir, exist_ok=True)
+    
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    log_file = os.path.join(log_dir, f'training_{timestamp}.log')
+    
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s [%(levelname)s] %(message)s',
+        handlers=[
+            logging.FileHandler(log_file),
+            logging.StreamHandler()
+        ]
+    )
+
+def train(config=None):
+    """Train the model with given configuration"""
+    setup_logging()
+    config = config or DEFAULT_CONFIG
+    
+    logging.info("Starting training with configuration:")
+    logging.info(f"Model config: {config['model']}")
+    
     try:
-        # Load data
-        X_train, X_test, y_train, y_test = load_and_preprocess_data(
-            config['data_path'],
-            test_mode=True,
-            test_size=config['test_size'],
-            random_state=config['random_state']
-        )
-
-        # Validate data
-        if X_train is None or y_train is None:
-            raise ValueError("Data preprocessing failed")
-
-        # Prepare GraphSAGE data
-        graph_data = prepare_graph_sage_data(pd.concat([X_train, y_train], axis=1))
-        if graph_data is None:
-            raise ValueError("GraphSAGE data preparation failed")
-
-        node_features, edges, labels = graph_data
-
-        # Initialize and train model
-        model = GraphSAGE(
-            input_dim=node_features.shape[1],
-            hidden_dim=config['hidden_dim'],
-            output_dim=config['output_dim']
-        )
-
-        # Training loop...
-
+        # Run pipeline with config
+        results = run_full_pipeline(config=config)  # Use keyword argument
+        
+        if results and results['model']:
+            # Save model
+            model_path = os.path.join('results', 'models', 'latest_model.pt')
+            os.makedirs(os.path.dirname(model_path), exist_ok=True)
+            torch.save(results['model'].state_dict(), model_path)
+            
+            logging.info(f"Model saved to {model_path}")
+            return results
+        else:
+            logging.error("Training failed - no results returned")
+            return None
+            
     except Exception as e:
-        print(f"Error in training: {str(e)}")
+        logging.error(f"Error during training: {str(e)}")
+        import traceback
+        logging.error(traceback.format_exc())
         return None
+
+if __name__ == "__main__":
+    train()

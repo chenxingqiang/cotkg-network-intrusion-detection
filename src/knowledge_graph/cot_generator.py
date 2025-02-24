@@ -11,6 +11,16 @@ import json
 import logging
 import time
 import zhipuai
+import sys
+from pathlib import Path
+import ollama
+
+# Add project root to Python path
+project_root = str(Path(__file__).parent.parent.parent)
+if project_root not in sys.path:
+    sys.path.append(project_root)
+
+from src.config.config import DEFAULT_CONFIG
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -43,7 +53,7 @@ class LLMProvider:
                 api_base="https://api.deepseek.com/v1"
             ),
             "qianwen": ModelConfig(
-                name="qwen-max",  # 可选 qwen-turbo、qwen-plus、qwen-max
+                name="qwen-max",
                 api_key_env="QIANWEN_API_KEY",
                 max_tokens=1500,
                 temperature=0.85
@@ -53,6 +63,13 @@ class LLMProvider:
                 api_key_env="ZHIPU_API_KEY",
                 max_tokens=1024,
                 temperature=0.95
+            ),
+            "ollama": ModelConfig(
+                name="llama2",
+                api_key_env="",  # No API key needed for local deployment
+                api_base="http://localhost:11434",
+                max_tokens=1500,
+                temperature=0.85
             )
         }
 
@@ -63,31 +80,65 @@ class LLMProvider:
     def _initialize_clients(self):
         """Initialize API clients for available models."""
         for provider, config in self.models.items():
-            api_key = os.getenv(config.api_key_env)
-            if api_key:
-                try:
-                    if provider == "openai":
+            try:
+                if provider == "openai":
+                    api_key = os.getenv(config.api_key_env)
+                    if api_key:
                         self.clients[provider] = OpenAI(api_key=api_key)
-                    elif provider == "anthropic":
-                        self.clients[provider] = anthropic.Client(
-                            api_key=api_key)
-                    elif provider == "deepseek":
+                elif provider == "anthropic":
+                    api_key = os.getenv(config.api_key_env)
+                    if api_key:
+                        self.clients[provider] = anthropic.Client(api_key=api_key)
+                elif provider == "deepseek":
+                    api_key = os.getenv(config.api_key_env)
+                    if api_key:
                         self.clients[provider] = {
                             "api_key": api_key,
                             "api_base": config.api_base
                         }
-                    elif provider == "qianwen":
+                elif provider == "qianwen":
+                    api_key = os.getenv(config.api_key_env)
+                    if api_key:
                         dashscope.api_key = api_key
                         self.clients[provider] = dashscope
-                    elif provider == "zhipu":
-                        # 修复智谱API初始化
+                elif provider == "zhipu":
+                    api_key = os.getenv(config.api_key_env)
+                    if api_key:
                         zhipuai.api_key = api_key
                         self.clients[provider] = zhipuai
+                elif provider == "ollama":
+                    try:
+                        # Initialize Ollama client
+                        self.clients[provider] = ollama.Client(host=config.api_base)
+                        # Test connection
+                        self.clients[provider].list()
+                        logger.info("Initialized Ollama client successfully")
+                    except Exception as e:
+                        logger.warning(f"Failed to connect to Ollama server: {str(e)}")
+
+                if provider != "ollama":  # Skip logging for Ollama as it's already logged
                     logger.info(f"Initialized {provider} client successfully")
-                except Exception as e:
-                    logger.error(f"Failed to initialize {provider} client: {str(e)}")
-            else:
-                logger.warning(f"No API key found for {provider} ({config.api_key_env})")
+            except Exception as e:
+                logger.error(f"Failed to initialize {provider} client: {str(e)}")
+
+    def _call_ollama(self, client, prompt: str, config: dict) -> str:
+        """Call Ollama API."""
+        try:
+            # Generate response using Ollama client
+            response = client.generate(
+                model=config.get('model', 'llama2'),
+                prompt=prompt,
+                options={
+                    'temperature': config.get('temperature', 0.85),
+                    'top_p': config.get('top_p', 0.8),
+                    'num_predict': config.get('max_tokens', 1500)
+                }
+            )
+            return response['response']
+
+        except Exception as e:
+            logger.error(f"Error calling Ollama API: {str(e)}")
+            raise
 
     def _call_deepseek(self, client: Dict, prompt: str) -> str:
         """Call Deepseek API."""
@@ -225,12 +276,16 @@ def parse_cot_response(response: str) -> Tuple[List[Dict], List[Dict]]:
     return entities, relationships
 
 
-def generate_cot(flow_data: str) -> str:
+def generate_cot(flow_data: str, config: dict = None) -> str:
     """
-    Generate chain of thought analysis using multiple LLM providers with fallback.
-    Returns the response text.
+    Generate chain of thought analysis using configured LLM providers.
+    Returns the combined response text.
     """
+    if config is None:
+        config = DEFAULT_CONFIG['cot']
+
     provider = LLMProvider()
+    responses = []
 
     prompt = f"""
     Given the following network flow data:
@@ -247,48 +302,39 @@ def generate_cot(flow_data: str) -> str:
     Based on your analysis, what type of network activity or attack do you think this flow represents?
     """
 
-    for model_name, client in provider.clients.items():
-        try:
-            logger.info(f"Attempting to generate response using {model_name}")
+    try:
+        providers = config['provider'] if isinstance(config['provider'], list) else [config['provider']]
+        
+        for provider_name in providers:
+            logger.info(f"Generating response using {provider_name}")
+            
+            try:
+                if provider_name == 'ollama':
+                    result = provider._call_ollama(provider.clients['ollama'], prompt, config)
+                    if isinstance(result, str):
+                        responses.append(result)
+                        logger.info("Successfully generated response using ollama")
+                
+                elif provider_name == 'qianwen':
+                    result = provider._call_qianwen(provider.clients['qianwen'], prompt)
+                    if isinstance(result, str):
+                        responses.append(result)
+                        logger.info("Successfully generated response using qianwen")
+                
+            except Exception as e:
+                logger.error(f"Error with {provider_name}: {str(e)}")
+                continue
+        
+        if not responses:
+            raise ValueError("No successful responses from any provider")
+        
+        # Combine responses - for now, just use the first successful response
+        # In the future, we could implement more sophisticated response combination
+        return responses[0]
 
-            if model_name == "openai":
-                response = client.chat.completions.create(
-                    model=provider.models[model_name].name,
-                    messages=[{"role": "user", "content": prompt}],
-                    max_tokens=provider.models[model_name].max_tokens
-                )
-                result = response.choices[0].message.content
-
-            elif model_name == "anthropic":
-                response = client.messages.create(
-                    model=provider.models[model_name].name,
-                    max_tokens=provider.models[model_name].max_tokens,
-                    messages=[{"role": "user", "content": prompt}]
-                )
-                result = response.content[0].text
-
-            elif model_name == "deepseek":
-                result = provider._call_deepseek(client, prompt)
-
-            elif model_name == "qianwen":
-                result = provider._call_qianwen(client, prompt)
-
-            elif model_name == "zhipu":
-                result = provider._call_zhipu(client, prompt)
-
-            # 检查并确保返回的是字符串
-            if not isinstance(result, str):
-                raise ValueError(f"Invalid response type from {model_name}: {type(result)}")
-
-            logger.info(f"Successfully generated response using {model_name}")
-            return result  # 只返回响应文本
-
-        except Exception as e:
-            logger.error(f"Error with {model_name}: {str(e)}")
-            time.sleep(1)
-            continue
-
-    raise Exception("All LLM providers failed to generate a response")
+    except Exception as e:
+        logger.error(f"Error generating responses: {str(e)}")
+        raise Exception(f"Failed to generate response: {str(e)}")
 
 
 # 测试代码
