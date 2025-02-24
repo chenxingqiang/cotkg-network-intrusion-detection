@@ -1,90 +1,148 @@
+# CoTKG-IDS: Chain of Thought Knowledge Graph Intrusion Detection System
 
-# CoT-KG Network Intrusion Detection using Knowledge Graph and GraphSAGE
-
-This project implements a network intrusion detection system using Chain of Thought (CoT), knowledge graphs and GraphSAGE model on the CICIDS2017 dataset. The Chain of Thought approach is used to enhance the knowledge graph construction and improve the interpretability of the detection process.
+## Overview
+CoTKG-IDS is an advanced network intrusion detection system that combines Chain of Thought (CoT) reasoning with knowledge graphs and GraphSAGE for enhanced detection capabilities and interpretability.
 
 ## Key Features
+- 🧠 Chain of Thought (CoT) enhanced reasoning
+- 🕸️ Dynamic knowledge graph construction
+- 📊 GraphSAGE-based network analysis
+- 🔍 Advanced feature engineering
+- ⚖️ Intelligent data balancing
+- 🎯 Multi-class attack detection
+- 📈 Comprehensive visualization
 
-- Chain of Thought (CoT) enhanced knowledge graph construction
-- GraphSAGE-based network intrusion detection
-- Interpretable AI techniques for explaining detection results
-- Integration of domain knowledge with machine learning
-
-## Data Download and Preparation
-
-The CICIDS2017 dataset is used in this project. Follow these steps to download and prepare the data:
-
- 1. Clone this repository:
-
-```bash
-git clone https://github.com/chenxingqiang/cotkg-network-intrusion-detection.git
-cd cotkg-network-intrusion-detection
+## Architecture
 ```
-
- 2. Install the required dependencies:
-
-```bash
-pip install -r requirements.txt
+Input Data → Feature Engineering → Knowledge Graph Construction → GraphSAGE Model → Attack Detection
+    ↓               ↓                       ↓                         ↓                ↓
+Preprocessing → Feature Selection → Graph Embeddings → Chain of Thought → Interpretability
 ```
-
- 3. Run the data download script:
-
-```bash
-python src/download_data.py
-```
-
-This script will:
-
-- Download the MachineLearningCSV.zip file from the CICIDS2017 dataset
-
-- Check the integrity of the downloaded file
-
-- Extract the contents to the `data/raw/` directory
-
-Note: The download might take some time as the file is about 224MB.
-
-4. After running the script, the data will be available in the `data/raw/MachineLearningCVE/` directory.
 
 ## Installation
 
-To install the required dependencies, run:
+### Prerequisites
+- Python 3.7+
+- Neo4j Database
+- PyTorch
+- CUDA (optional, for GPU support)
 
+### Quick Start
 ```bash
-pip install -r requirements.txt
+# Clone repository
+git clone https://github.com/chenxingqiang/cotkg-ids.git
+cd cotkg-ids
+
+# Setup environment
+./env_manager.sh setup
+
+# Setup Neo4j
+./setup_neo4j.sh
+
+# Run the system
+python run.py
+```
+
+### Docker Setup
+```bash
+docker-compose up -d
 ```
 
 ## Usage
 
-After preparing the data, you can run the main script to train and evaluate the model:
+### Basic Usage
+```python
+from src.main import run_full_pipeline
 
-```bash
-python src/main.py
-
+# Run complete pipeline
+results = run_full_pipeline()
 ```
 
-This script will:
+### Custom Configuration
+```python
+from src.config.config import DEFAULT_CONFIG
 
-- Load and preprocess the data
-- Perform feature engineering
-- Construct the knowledge graph
-- Train the GraphSAGE model
-- Evaluate the model
-- Generate explanations for the predictions
+# Modify configuration
+config = DEFAULT_CONFIG.copy()
+config['model_params']['hidden_channels'] = 128
+config['training_params']['epochs'] = 200
 
-## Note
+# Run with custom config
+results = run_full_pipeline(config)
+```
 
-The raw data files are large and are not included in the git repository. They will be downloaded when you run the `download_data.py` script. If you need to share the project, others can use the same script to download the data.
+## Components
 
-## Author
+### Knowledge Graph Construction
+- Dynamic graph building
+- Feature-based node linking
+- Similarity-based edge creation
+- Automatic node mapping
 
-Chen Xingqiang
-Hanghzou Turing AI Co.,Ltd.
-Email: <chen.xingqiang@iechor.com>
+### GraphSAGE Model
+- Multi-layer architecture
+- Dropout regularization
+- Self-loop handling
+- Automatic data preparation
+
+### Data Processing
+- Advanced feature engineering
+- Intelligent data balancing
+- Automated preprocessing
+- Robust error handling
+
+## Results Directory Structure
+```
+results/
+├── feature_importance.csv   # Feature importance rankings
+├── model_stats.txt         # Model performance statistics
+├── visualizations/         # Generated visualizations
+└── models/                # Saved model checkpoints
+```
+
+## Development
+
+### Running Tests
+```bash
+python test_pipeline.py
+```
+
+### Code Style
+```bash
+# Format code
+black src/
+
+# Run linter
+flake8 src/
+```
+
+### Version Management
+```bash
+# Bump version
+./bump_version.sh patch  # or minor/major
+```
+
+## Contributing
+1. Fork the repository
+2. Create your feature branch
+3. Commit your changes
+4. Push to the branch
+5. Create a Pull Request
 
 ## License
+MIT License - see [LICENSE](LICENSE)
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+## Citation
+```bibtex
+@software{cotkg_ids2024,
+  author = {Chen, Xingqiang},
+  title = {CoTKG-IDS: Chain of Thought Knowledge Graph IDS},
+  year = {2024},
+  publisher = {GitHub},
+  url = {https://github.com/chenxingqiang/cotkg-ids}
+}
+```
 
-## Acknowledgments
-
-- CICIDS2017 dataset: <https://www.unb.ca/cic/datasets/ids-2017.html>
+## Contact
+Chen Xingqiang  
+Email: chen.xingqiang@iechor.com

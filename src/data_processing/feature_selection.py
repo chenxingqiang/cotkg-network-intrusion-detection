@@ -32,4 +32,4 @@ def select_features(X, y, k=10):
 
     except Exception as e:
         print(f"Error in feature selection: {str(e)}")
-        return X, X.columns.tolist()  # Return original features if selection fails
+        return None, None

@@ -20,6 +20,27 @@ wheels/
 .installed.cfg
 *.egg
 
+# Virtual Environment
+venv/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Project specific
+data/raw/*
+!data/raw/.gitkeep
+results/*
+!results/.gitkeep
+*.log
+.DS_Store
+
+# Neo4j
+neo4j/data/
+
 # Jupyter Notebook
 .ipynb_checkpoints
 

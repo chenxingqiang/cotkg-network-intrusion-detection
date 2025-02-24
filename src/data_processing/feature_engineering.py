@@ -4,109 +4,74 @@ from scipy.stats import kurtosis, skew
 
 
 def engineer_features(df):
-    """
-    对网络流量数据进行特征工程
-
-    Args:
-        df (pd.DataFrame): 原始数据框
-
-    Returns:
-        pd.DataFrame: 增强后的数据框
-    """
+    """Engineer additional features from network flow data"""
     try:
-        # 重置索引避免重复索引问题
-        df = df.reset_index(drop=True)
-
-        # 创建副本避免修改原始数据
+        # Create copy to avoid modifying original data
         df = df.copy()
-
-        # 1. 基于Duration和IAT的时间特征
-        if 'Duration' in df.columns:
-            df['Duration_Log'] = np.log1p(df['Duration'])  # 使用log变换处理偏斜分布
-
-        if 'IAT' in df.columns:
-            df['IAT_Log'] = np.log1p(df['IAT'])
-            df['IAT_per_packet'] = df['IAT'] / df['Number']  # 平均包间隔时间
-
-        # 2. 速率相关特征
-        if all(col in df.columns for col in ['Rate', 'Srate', 'Drate']):
-            df['Rate_Ratio'] = df['Srate'] / \
-                df['Drate'].replace(0, 1)  # 源目标速率比
-            df['Total_Rate'] = df['Srate'] + df['Drate']  # 总速率
-
-        # 3. 标志位组合特征
-        flag_cols = ['fin_flag_number', 'syn_flag_number', 'rst_flag_number',
-                     'psh_flag_number', 'ack_flag_number', 'ece_flag_number',
-                     'cwr_flag_number']
-
-        if all(col in df.columns for col in flag_cols):
-            # 计算总标志位数
-            df['Total_Flags'] = df[flag_cols].sum(axis=1)
-
-            # 计算SYN-ACK比率
-            df['SYN_ACK_Ratio'] = df['syn_flag_number'] / \
-                df['ack_flag_number'].replace(0, 1)
-
-            # 标志位组合特征
-            df['Flag_Diversity'] = (df[flag_cols] > 0).sum(
-                axis=1)  # 使用的不同标志位数量
-
-        # 4. 协议特征
-        protocol_cols = ['HTTP', 'HTTPS', 'DNS', 'Telnet', 'SMTP', 'SSH',
-                         'IRC', 'TCP', 'UDP', 'DHCP', 'ARP', 'ICMP', 'IPv', 'LLC']
-
-        if all(col in df.columns for col in protocol_cols):
-            # 计算使用的协议数量
-            df['Protocol_Count'] = df[protocol_cols].sum(axis=1)
-
-        # 5. 统计特征
-        numeric_cols = ['Tot sum', 'Min', 'Max', 'AVG', 'Std', 'Tot size',
-                        'Number', 'Magnitue', 'Radius', 'Covariance', 'Variance']
-
-        if all(col in df.columns for col in numeric_cols):
-            # 基本统计特征
-            for col in numeric_cols:
-                df[f'{col}_Log'] = np.log1p(df[col])  # log变换
-
-            # 计算高阶统计量
-            window_sizes = [5, 10, 20]  # 不同窗口大小
-            for window in window_sizes:
-                for col in numeric_cols:
-                    # 滚动统计
-                    df[f'{col}_Rolling_Mean_{window}'] = df[col].rolling(
-                        window=window, min_periods=1).mean()
-                    df[f'{col}_Rolling_Std_{window}'] = df[col].rolling(
-                        window=window, min_periods=1).std()
-                    # 使用fillna处理开始的空值
-                    df.loc[:, f'{col}_Rolling_Mean_{window}'] = df[f'{col}_Rolling_Mean_{window}'].fillna(0)
-                    df.loc[:, f'{col}_Rolling_Std_{window}'] = df[f'{col}_Rolling_Std_{window}'].fillna(0)
-
-        # 6. 复合特征
-        if all(col in df.columns for col in ['Tot size', 'Number', 'Duration']):
-            # 每个包的平均大小
-            df['Bytes_Per_Packet'] = df['Tot size'] / \
-                df['Number'].replace(0, 1)
-            # 包传输速率
-            df['Packets_Per_Second'] = df['Number'] / \
-                df['Duration'].replace(0, 1)
-            # 字节传输速率
-            df['Bytes_Per_Second'] = df['Tot size'] / \
-                df['Duration'].replace(0, 1)
-
-        # 7. 网络行为特征
+        
+        # Basic flow features
+        if all(col in df.columns for col in ['total_fwd_packets', 'total_backward_packets']):
+            df['total_packets'] = df['total_fwd_packets'] + df['total_backward_packets']
+            df['forward_ratio'] = df['total_fwd_packets'] / df['total_packets'].replace(0, 1)
+        
+        # Time-based features
         if 'flow_duration' in df.columns:
-            df['Flow_Speed'] = df['Tot size'] / \
-                df['flow_duration'].replace(0, 1)
-
-        # 8. 移除或处理无穷值和NA值
-        df.replace([np.inf, -np.inf], np.nan, inplace=True)
-        df.fillna(0, inplace=True)
-
+            # Packets per second
+            df['packets_per_second'] = df['total_packets'] / df['flow_duration'].replace(0, 1)
+            
+            # Bytes per second
+            if 'total_length_of_fwd_packets' in df.columns and 'total_length_of_bwd_packets' in df.columns:
+                df['total_bytes'] = df['total_length_of_fwd_packets'] + df['total_length_of_bwd_packets']
+                df['bytes_per_second'] = df['total_bytes'] / df['flow_duration'].replace(0, 1)
+                df['bytes_per_packet'] = df['total_bytes'] / df['total_packets'].replace(0, 1)
+        
+        # Statistical features with error handling
+        numeric_cols = df.select_dtypes(include=[np.number]).columns
+        for col in numeric_cols:
+            if col.endswith(('_mean', '_std', '_min', '_max')):
+                continue
+                
+            # Calculate statistical features with error handling
+            try:
+                df[f'{col}_kurt'] = df[col].rolling(
+                    window=3, 
+                    min_periods=1,
+                    center=True
+                ).apply(lambda x: kurtosis(x, nan_policy='omit'))
+                
+                df[f'{col}_skew'] = df[col].rolling(
+                    window=3,
+                    min_periods=1,
+                    center=True
+                ).apply(lambda x: skew(x, nan_policy='omit'))
+            except Exception as e:
+                print(f"Warning: Could not calculate statistics for {col}: {str(e)}")
+        
+        # Protocol-specific features
+        if 'protocol' in df.columns:
+            df['is_tcp'] = (df['protocol'] == 'TCP').astype(int)
+            df['is_udp'] = (df['protocol'] == 'UDP').astype(int)
+            df['is_icmp'] = (df['protocol'] == 'ICMP').astype(int)
+        
+        # Flag-based features
+        flag_cols = [col for col in df.columns if 'flag' in col.lower()]
+        if flag_cols:
+            df['total_flags'] = df[flag_cols].fillna(0).sum(axis=1)
+            df['flag_diversity'] = (df[flag_cols] > 0).sum(axis=1)
+        
+        # Handle infinite values
+        df = df.replace([np.inf, -np.inf], np.nan)
+        
+        # Fill NaN values
+        df = df.ffill().bfill().fillna(0)
+        
         return df
-
+        
     except Exception as e:
         print(f"Error in feature engineering: {str(e)}")
-        return df  # 返回原始数据框如果特征工程失败
+        import traceback
+        traceback.print_exc()
+        return None
 
 
 def get_feature_importance(df, target='label'):

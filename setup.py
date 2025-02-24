@@ -4,8 +4,8 @@ with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
 setup(
-    name="cotkg-network-intrusion-detection",
-    version="0.1.1",
+    name="cotkg-ids",
+    version="0.1",
     author="Chen Xingqiang",
     author_email="chen.xingqiang@iechor.com",
     description="A network intrusion detection system using Chain of Thought, knowledge graphs and GraphSAGE",
