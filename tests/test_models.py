@@ -1,7 +1,7 @@
 import unittest
 import torch
-from src.models.graph_sage_model import GraphSAGE
-from src.models.hybrid_model import HybridModel
+from cotkg_ids.models.graph_sage_model import GraphSAGE
+from cotkg_ids.models.hybrid_model import HybridModel
 from torch_geometric.data import Data
 
 

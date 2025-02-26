@@ -24,10 +24,10 @@ class TestPipeline(unittest.TestCase):
         logging.basicConfig(level=logging.INFO)
         cls.logger = logging.getLogger(__name__)
         cls.logger.info("Setting up test pipeline...")
-        
+
         # Set up test data paths
         cls.raw_data_path = os.path.join(PROJECT_ROOT, 'data', 'raw', 'CICIDS2017.csv')
-        
+
         # Create comprehensive sample test data with edge cases
         cls.sample_data = pd.DataFrame({
             'total_fwd_packets': [100, 200, 300, 400, 500, 0, 1000000],  # Changed from Packet Count
@@ -44,11 +44,11 @@ class TestPipeline(unittest.TestCase):
             'flag_urg': [0, 0, 0, 0, 0, 0, 1],
             'label': ['normal', 'attack', 'normal', 'attack', 'normal', 'normal', 'attack']
         })
-        
+
         # Initialize Knowledge Graph with retry mechanism
         max_retries = 3
         retry_delay = 2
-        
+
         for attempt in range(max_retries):
             try:
                 cls.logger.info(f"Attempting to connect to Neo4j (attempt {attempt + 1}/{max_retries})...")
@@ -64,20 +64,20 @@ class TestPipeline(unittest.TestCase):
                     raise Exception(error_msg)
                 cls.logger.warning(f"Connection attempt {attempt + 1} failed, retrying...")
                 time.sleep(retry_delay)
-        
+
         cls.kg_analyzer = KnowledgeGraphAnalyzer()
 
     def setUp(self):
         """Set up test fixtures before each test."""
         self.logger.info("\n=== Starting new test ===")
-        
+
         # Clear existing graph data
         try:
             self.kg_constructor.clear_graph()
             self.logger.info("Cleared existing graph data")
         except Exception as e:
             self.logger.warning(f"Failed to clear graph: {str(e)}")
-        
+
         # Reset test data
         self.test_data = self.sample_data.copy()
         self.logger.info(f"Test data prepared with {len(self.test_data)} samples")
@@ -85,28 +85,28 @@ class TestPipeline(unittest.TestCase):
     def test_data_preprocessing(self):
         """Test data preprocessing step of the pipeline."""
         self.logger.info("Testing data preprocessing...")
-        
+
         # Test with sample data
         try:
             processed_data = load_and_preprocess_data(self.test_data, test_mode=True)
-            
+
             self.assertIsInstance(processed_data, pd.DataFrame)
             self.assertTrue(all(col.islower() for col in processed_data.columns))
             self.assertGreater(len(processed_data.columns), 0)
-            
+
             # Check for NaN values
             self.assertFalse(processed_data.isna().any().any(), "Preprocessed data contains NaN values")
-            
+
             # Check data types
             numeric_cols = processed_data.select_dtypes(include=[np.number]).columns
             self.assertGreater(len(numeric_cols), 0, "No numeric columns found after preprocessing")
-            
+
             self.logger.info("Sample data preprocessing successful")
-            
+
         except Exception as e:
             self.logger.error(f"Sample data preprocessing failed: {str(e)}")
             raise
-        
+
         # Test with file input if available
         if os.path.exists(self.raw_data_path):
             try:
@@ -123,35 +123,35 @@ class TestPipeline(unittest.TestCase):
     def test_feature_engineering(self):
         """Test feature engineering step of the pipeline."""
         self.logger.info("Testing feature engineering...")
-        
+
         try:
             # First preprocess the data
             processed_data = load_and_preprocess_data(self.test_data, test_mode=True)
-            
+
             # Then engineer features
             engineered_data = engineer_features(processed_data)
-            
+
             self.assertIsInstance(engineered_data, pd.DataFrame)
             self.assertGreaterEqual(len(engineered_data.columns), len(processed_data.columns))
-            
+
             # Verify engineered features
             required_features = ['flow_bytes/s', 'flow_packets/s']
             for feature in required_features:
                 self.assertIn(feature, engineered_data.columns)
                 self.assertTrue((engineered_data[feature] >= 0).all())
-            
+
             # Check for NaN values in engineered features
             self.assertFalse(engineered_data.isna().any().any(), "Engineered features contain NaN values")
-            
+
             # Verify edge cases
             zero_duration_rows = processed_data[processed_data['flow_duration'] == 0]
             if not zero_duration_rows.empty:
                 zero_duration_features = engineered_data.loc[zero_duration_rows.index]
-                self.assertTrue(all(zero_duration_features['flow_bytes/s'].notna()), 
+                self.assertTrue(all(zero_duration_features['flow_bytes/s'].notna()),
                               "Flow bytes/s undefined for zero duration")
-            
+
             self.logger.info("Feature engineering successful")
-            
+
         except Exception as e:
             self.logger.error(f"Feature engineering failed: {str(e)}")
             raise
@@ -159,39 +159,39 @@ class TestPipeline(unittest.TestCase):
     def test_data_balancing(self):
         """Test data balancing step of the pipeline."""
         self.logger.info("Testing data balancing...")
-        
+
         try:
             # Prepare data
             processed_data = load_and_preprocess_data(self.test_data, test_mode=True)
             engineered_data = engineer_features(processed_data)
-            
+
             X = engineered_data.drop('label', axis=1)
             y = engineered_data['label']
-            
+
             # Test each balancing method
             balancing_methods = ['smote', 'basic', 'smote_tomek', 'hybrid']
-            
+
             for method in balancing_methods:
                 with self.subTest(method=method):
                     self.logger.info(f"Testing {method} balancing method...")
-                    
+
                     X_balanced, y_balanced = balance_dataset(X, y, method=method)
-                    
+
                     self.assertIsInstance(X_balanced, pd.DataFrame)
                     self.assertIsInstance(y_balanced, pd.Series)
                     self.assertEqual(len(X_balanced), len(y_balanced))
-                    
+
                     # Check if classes are more balanced
                     value_counts = y_balanced.value_counts()
                     balance_ratio = max(value_counts) / min(value_counts)
                     self.assertLess(balance_ratio, len(y.value_counts()) + 1)
-                    
+
                     # Check for data integrity
-                    self.assertFalse(X_balanced.isna().any().any(), 
+                    self.assertFalse(X_balanced.isna().any().any(),
                                    f"Balanced data contains NaN values with {method} method")
-                    
+
                     self.logger.info(f"{method} balancing successful with ratio {balance_ratio:.2f}")
-            
+
         except Exception as e:
             self.logger.error(f"Data balancing failed: {str(e)}")
             raise
@@ -200,10 +200,10 @@ class TestPipeline(unittest.TestCase):
     def test_knowledge_graph_construction_with_mock(self, mock_add_flow):
         """Test knowledge graph construction with mocked Neo4j."""
         self.logger.info("Testing knowledge graph construction with mock...")
-        
+
         # Configure mock
         mock_add_flow.return_value = True
-        
+
         try:
             # Prepare data
             processed_data = load_and_preprocess_data(self.test_data, test_mode=True)
@@ -211,29 +211,29 @@ class TestPipeline(unittest.TestCase):
             X = engineered_data.drop('label', axis=1)
             y = engineered_data['label']
             X_balanced, y_balanced = balance_dataset(X, y, method='basic')
-            
+
             # Reset index
             X_balanced = X_balanced.reset_index(drop=True)
             y_balanced = y_balanced.reset_index(drop=True)
-            
+
             # Add flows to graph
             for idx, (_, row) in enumerate(X_balanced.iterrows()):
                 flow_data = {
                     **row.to_dict(),
                     'label': y_balanced[idx]
                 }
-                
+
                 # Convert numpy types to Python native types
                 flow_data = {
-                    k: float(v) if isinstance(v, (np.float32, np.float64)) else v 
+                    k: float(v) if isinstance(v, (np.float32, np.float64)) else v
                     for k, v in flow_data.items()
                 }
-                
+
                 result = self.kg_constructor.add_flow(flow_data)
                 self.assertTrue(result)
-            
+
             self.logger.info("Mock knowledge graph construction successful")
-            
+
         except Exception as e:
             self.logger.error(f"Mock knowledge graph construction failed: {str(e)}")
             raise
@@ -241,7 +241,7 @@ class TestPipeline(unittest.TestCase):
     def test_knowledge_graph_construction(self):
         """Test knowledge graph construction with real Neo4j."""
         self.logger.info("Testing knowledge graph construction...")
-        
+
         try:
             # Prepare data
             processed_data = load_and_preprocess_data(self.test_data, test_mode=True)
@@ -249,37 +249,46 @@ class TestPipeline(unittest.TestCase):
             X = engineered_data.drop('label', axis=1)
             y = engineered_data['label']
             X_balanced, y_balanced = balance_dataset(X, y, method='basic')
-            
+
             # Reset index
             X_balanced = X_balanced.reset_index(drop=True)
             y_balanced = y_balanced.reset_index(drop=True)
-            
+
             # Add flows to graph
             for idx, (_, row) in enumerate(X_balanced.iterrows()):
                 flow_data = {
                     **row.to_dict(),
                     'label': y_balanced[idx]
                 }
-                
+
                 # Convert numpy types to Python native types
                 flow_data = {
-                    k: float(v) if isinstance(v, (np.float32, np.float64)) else v 
+                    k: float(v) if isinstance(v, (np.float32, np.float64)) else v
                     for k, v in flow_data.items()
                 }
-                
+
                 result = self.kg_constructor.add_flow(flow_data)
                 self.assertIsNotNone(result)
-            
+
             # Verify graph construction
             stats = self.kg_analyzer.get_graph_statistics()
             self.assertIsInstance(stats, dict)
             self.assertIn('nodes', stats)
             self.assertIn('relationships', stats)
-            self.assertGreaterEqual(stats['nodes'], 0)
-            self.assertGreaterEqual(stats['relationships'], 0)
             
-            self.logger.info(f"Knowledge graph construction successful with {stats['nodes']} nodes and {stats['relationships']} relationships")
+            # Check that nodes and relationships are dictionaries
+            self.assertIsInstance(stats['nodes'], dict)
+            self.assertIsInstance(stats['relationships'], dict)
             
+            # Check that there are some nodes and relationships
+            total_nodes = sum(stats['nodes'].values())
+            total_relationships = sum(stats['relationships'].values())
+            self.assertGreaterEqual(total_nodes, 0)
+            self.assertGreaterEqual(total_relationships, 0)
+
+            self.logger.info(f"Knowledge graph construction successful with {total_nodes} nodes and {total_relationships} relationships")
+            self.logger.info("Complete pipeline test successful!")
+
         except Exception as e:
             self.logger.error(f"Knowledge graph construction failed: {str(e)}")
             raise
@@ -287,51 +296,65 @@ class TestPipeline(unittest.TestCase):
     def test_complete_pipeline(self):
         """Test the complete pipeline end-to-end."""
         self.logger.info("Testing complete pipeline...")
-        
+
         try:
             # 1. Data preprocessing
             processed_data = load_and_preprocess_data(self.test_data, test_mode=True)
             self.assertIsInstance(processed_data, pd.DataFrame)
             self.logger.info("Pipeline step 1: Preprocessing complete")
-            
+
             # 2. Feature engineering
             engineered_data = engineer_features(processed_data)
             self.assertIsInstance(engineered_data, pd.DataFrame)
             self.logger.info("Pipeline step 2: Feature engineering complete")
-            
+
             # 3. Data balancing
             X = engineered_data.drop('label', axis=1)
             y = engineered_data['label']
             X_balanced, y_balanced = balance_dataset(X, y, method='basic')
             self.assertEqual(len(X_balanced), len(y_balanced))
             self.logger.info("Pipeline step 3: Data balancing complete")
-            
+
             # 4. Knowledge graph construction
             X_balanced = X_balanced.reset_index(drop=True)
             y_balanced = y_balanced.reset_index(drop=True)
-            
-            for idx, (_, row) in enumerate(X_balanced.iterrows()):
+
+            # Limit the number of flows to add to the knowledge graph
+            max_flows = 5  # Only add up to 5 flows to limit test time
+            flow_count = min(max_flows, len(X_balanced))
+            self.logger.info(f"Adding {flow_count} flows to knowledge graph (limited for testing)")
+
+            for idx in range(flow_count):
+                row = X_balanced.iloc[idx]
                 flow_data = {
                     **row.to_dict(),
                     'label': y_balanced[idx]
                 }
-                flow_data = {k: float(v) if isinstance(v, (np.float32, np.float64)) else v 
+                flow_data = {k: float(v) if isinstance(v, (np.float32, np.float64)) else v
                             for k, v in flow_data.items()}
-                
+
                 result = self.kg_constructor.add_flow(flow_data)
                 self.assertIsNotNone(result)
-            
+
             # 5. Verify final graph state
             stats = self.kg_analyzer.get_graph_statistics()
             self.assertIsInstance(stats, dict)
             self.assertIn('nodes', stats)
             self.assertIn('relationships', stats)
-            self.assertGreaterEqual(stats['nodes'], 0)
-            self.assertGreaterEqual(stats['relationships'], 0)
             
-            self.logger.info("Pipeline step 4: Knowledge graph construction complete")
+            # Check that nodes and relationships are dictionaries
+            self.assertIsInstance(stats['nodes'], dict)
+            self.assertIsInstance(stats['relationships'], dict)
+            
+            # Check that there are some nodes and relationships
+            total_nodes = sum(stats['nodes'].values())
+            total_relationships = sum(stats['relationships'].values())
+            self.assertGreaterEqual(total_nodes, 0)
+            self.assertGreaterEqual(total_relationships, 0)
+            
+            self.logger.info(f"Pipeline step 4: Knowledge graph construction complete with {total_nodes} nodes and {total_relationships} relationships")
             self.logger.info("Complete pipeline test successful!")
-            
+
         except Exception as e:
             self.logger.error(f"Complete pipeline test failed: {str(e)}")
             raise
@@ -354,4 +377,4 @@ class TestPipeline(unittest.TestCase):
             cls.logger.warning(f"Final cleanup failed: {str(e)}")
 
 if __name__ == '__main__':
-    unittest.main(verbosity=2) 
+    unittest.main(verbosity=2)

@@ -20,7 +20,7 @@ project_root = str(Path(__file__).parent.parent.parent)
 if project_root not in sys.path:
     sys.path.append(project_root)
 
-from src.config.config import DEFAULT_CONFIG
+from cotkg_ids.config.config import DEFAULT_CONFIG
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -228,38 +228,99 @@ def parse_cot_response(response: str) -> Tuple[List[Dict], List[Dict]]:
     relationships = []
 
     try:
-        # 改进解析逻辑以处理更多格式
+        # Improved parsing logic to handle more formats
         lines = response.split('\n')
         attack_type = None
+        in_entities_section = False
+        in_relationships_section = False
 
-        for line in lines:
-            # 提取特征
-            if any(x in line.lower() for x in ['key feature:', 'identified feature:', '- **']):
-                feature = None
-                if ':' in line:
-                    feature = line.split(':')[1].strip()
-                elif '**' in line:
-                    feature = line.split('**')[1].strip()
+        for i, line in enumerate(lines):
+            line = line.strip()
 
-                if feature:
-                    entities.append({
-                        'type': 'Feature',
-                        'name': feature
-                    })
+            # Check for section headers
+            if 'entities:' in line.lower():
+                in_entities_section = True
+                in_relationships_section = False
+                continue
+            elif 'relationships:' in line.lower():
+                in_entities_section = False
+                in_relationships_section = True
+                continue
 
-            # 提取攻击类型
-            if any(x in line.lower() for x in ['likely attack:', 'attack type:', 'this flow represents', 'most likely']):
-                for attack_keyword in ['port scan', 'ddos', 'brute force', 'botnet', 'malware']:
-                    if attack_keyword in line.lower():
-                        attack_type = attack_keyword.title()
-                        entities.append({
-                            'type': 'Attack',
-                            'name': attack_type
+            # Extract entities
+            if in_entities_section:
+                # Look for numbered or bulleted items
+                if line.strip().startswith(('1.', '2.', '3.', '-', '*')) and ':' in line:
+                    parts = line.split(':', 1)
+                    if len(parts) > 1:
+                        entity_type = None
+                        entity_name = None
+
+                        # Extract entity type and name
+                        header = parts[0].strip().lstrip('123456789.-* ')
+                        if 'attack' in header.lower():
+                            entity_type = 'Attack'
+                            entity_name = parts[1].strip()
+                        elif 'feature' in header.lower():
+                            entity_type = 'Feature'
+                            entity_name = parts[1].strip()
+
+                        if entity_type and entity_name:
+                            entities.append({
+                                'type': entity_type,
+                                'name': entity_name
+                            })
+
+                            # If it's an attack, store it for relationships
+                            if entity_type == 'Attack':
+                                attack_type = entity_name
+
+            # Extract relationships
+            elif in_relationships_section:
+                if line.strip().startswith(('1.', '2.', '3.', '-', '*')) and 'indicates' in line.lower():
+                    parts = line.split('INDICATES')
+                    if len(parts) < 2:  # Try lowercase
+                        parts = line.split('indicates')
+
+                    if len(parts) >= 2:
+                        source = parts[0].strip().lstrip('123456789.-* ')
+                        target = parts[1].strip().split('(')[0].strip()
+
+                        relationships.append({
+                            'source': source,
+                            'type': 'INDICATES',
+                            'target': target
                         })
-                        break
 
-        # 建立关系
-        if attack_type:
+            # Fallback extraction for non-sectioned responses
+            if not in_entities_section and not in_relationships_section:
+                # Extract features
+                if any(x in line.lower() for x in ['key feature:', 'identified feature:', '- **']):
+                    feature = None
+                    if ':' in line:
+                        feature = line.split(':')[1].strip()
+                    elif '**' in line:
+                        feature = line.split('**')[1].strip()
+
+                    if feature:
+                        entities.append({
+                            'type': 'Feature',
+                            'name': feature
+                        })
+
+                # Extract attack type
+                if any(x in line.lower() for x in ['likely attack:', 'attack type:', 'this flow represents', 'most likely']):
+                    for attack_keyword in ['port scan', 'ddos', 'brute force', 'botnet', 'malware']:
+                        if attack_keyword in line.lower():
+                            attack_type = attack_keyword.title()
+                            entities.append({
+                                'type': 'Attack',
+                                'name': attack_type
+                            })
+                            break
+
+        # Build relationships if not explicitly defined
+        if attack_type and not relationships:
             for entity in entities:
                 if entity['type'] == 'Feature':
                     relationships.append({
@@ -272,6 +333,8 @@ def parse_cot_response(response: str) -> Tuple[List[Dict], List[Dict]]:
 
     except Exception as e:
         logger.error(f"Error parsing CoT response: {str(e)}")
+        import traceback
+        traceback.print_exc()
 
     return entities, relationships
 
@@ -304,30 +367,30 @@ def generate_cot(flow_data: str, config: dict = None) -> str:
 
     try:
         providers = config['provider'] if isinstance(config['provider'], list) else [config['provider']]
-        
+
         for provider_name in providers:
             logger.info(f"Generating response using {provider_name}")
-            
+
             try:
                 if provider_name == 'ollama':
                     result = provider._call_ollama(provider.clients['ollama'], prompt, config)
                     if isinstance(result, str):
                         responses.append(result)
                         logger.info("Successfully generated response using ollama")
-                
+
                 elif provider_name == 'qianwen':
                     result = provider._call_qianwen(provider.clients['qianwen'], prompt)
                     if isinstance(result, str):
                         responses.append(result)
                         logger.info("Successfully generated response using qianwen")
-                
+
             except Exception as e:
                 logger.error(f"Error with {provider_name}: {str(e)}")
                 continue
-        
+
         if not responses:
             raise ValueError("No successful responses from any provider")
-        
+
         # Combine responses - for now, just use the first successful response
         # In the future, we could implement more sophisticated response combination
         return responses[0]
