@@ -63,8 +63,9 @@ setup(
     package_data={
         'cotkg_ids': [
             'config/*.py',
-            'data/raw/*',
-            'data/processed/*',
+            'data/processed/*.npy',
+            'data/processed/*.joblib',
+            'data/raw/*.md5',
             'scripts/*',
         ],
     },
