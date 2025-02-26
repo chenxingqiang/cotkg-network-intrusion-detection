@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="cotkg-ids",
-    version="0.2.2",
+    version="0.2.3",
     author="Chen Xingqiang",
     author_email="chen.xingqiang@iechor.com",
     description="A network intrusion detection system using Chain of Thought, knowledge graphs and GraphSAGE",
